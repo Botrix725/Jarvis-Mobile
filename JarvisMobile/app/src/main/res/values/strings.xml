@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">JARVIS</string>
+    <string name="accessibility_description">Allows JARVIS to find and activate on-screen controls only when you explicitly ask it to. Enable only if you understand and accept this access.</string>
+</resources>
