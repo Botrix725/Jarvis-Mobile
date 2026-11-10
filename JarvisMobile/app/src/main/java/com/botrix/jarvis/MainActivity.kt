@@ -34,6 +34,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.Locale
+import org.json.JSONObject
+import org.json.JSONArray
 
 private val bg = Color(0xFF050B16)
 private val panel = Color(0xFF101D31)
@@ -44,7 +46,8 @@ private data class ChatLine(
     val text: String
 )
 
-class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+class MainActivity : ComponentActivity(),
+    TextToSpeech.OnInitListener {
 
     private var tts: TextToSpeech? = null
 
@@ -63,7 +66,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     )
                 },
                 openSystemSettings = {
-                    startActivity(Intent(Settings.ACTION_SETTINGS))
+                    startActivity(
+                        Intent(Settings.ACTION_SETTINGS)
+                    )
                 },
                 setVolume = { setPhoneVolume(it) }
             )
@@ -120,7 +125,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
             "settings" in query -> {
                 return try {
-                    startActivity(Intent(Settings.ACTION_SETTINGS))
+                    startActivity(
+                        Intent(Settings.ACTION_SETTINGS)
+                    )
                     "Opening Android Settings."
                 } catch (_: Exception) {
                     "Could not open Settings."
@@ -219,8 +226,7 @@ private fun JarvisApp(
                     }
 
             } catch (_: Exception) {
-                status =
-                    "Could not read this file. Try a text-based TXT file."
+                status = "Could not read this file. Try a text-based TXT file."
             }
         }
     }
@@ -329,7 +335,6 @@ private fun JarvisApp(
                 Button(
                     onClick = {
                         if (apiKey.isNotBlank()) {
-
                             prefs.edit()
                                 .putString("provider", provider)
                                 .putString("api_key", apiKey.trim())
@@ -360,7 +365,6 @@ private fun JarvisApp(
                 ) {
 
                     Column {
-
                         Text(
                             "J A R V I S",
                             color = cyan,
@@ -462,7 +466,6 @@ private fun JarvisApp(
                 ) {
 
                     if (lines.isEmpty()) {
-
                         item {
                             Text(
                                 "Good evening. I am JARVIS. Ask me anything. " +
@@ -508,7 +511,6 @@ private fun JarvisApp(
 
                     IconButton(
                         onClick = {
-
                             val intent = Intent(
                                 RecognizerIntent.ACTION_RECOGNIZE_SPEECH
                             ).apply {
@@ -521,8 +523,7 @@ private fun JarvisApp(
                             try {
                                 voice.launch(intent)
                             } catch (_: Exception) {
-                                status =
-                                    "Speech recognition is unavailable."
+                                status = "Speech recognition is unavailable."
                             }
                         }
                     ) {
@@ -551,44 +552,51 @@ private fun JarvisApp(
 
                                 scope.launch {
 
-                                    val local = handleLocalCommand(
-                                        prompt,
-                                        launchApp,
-                                        setVolume
-                                    )
+                                    try {
+                                        val local = handleLocalCommand(
+                                            prompt,
+                                            launchApp,
+                                            setVolume
+                                        )
 
-                                    val answer = local ?: runCatching {
-                                        AiClient.ask(
+                                        val answer = local ?: AiClient.ask(
                                             provider,
                                             apiKey,
                                             prompt,
                                             attachment?.second
                                         )
-                                    }.getOrElse {
-                                        "Connection error: " +
-                                        "${it.message ?: "Unknown error"}. " +
-                                        "Check your API key and internet connection."
+
+                                        lines.add(
+                                            ChatLine(false, answer)
+                                        )
+
+                                        status =
+                                            "RESPONSE RECEIVED • SYSTEM READY"
+
+                                        speak(answer)
+
+                                    } catch (e: Exception) {
+
+                                        val errorMessage =
+                                            "Connection error: " +
+                                            (e.message ?: "Unknown error") +
+                                            ". Check your API key and internet connection."
+
+                                        lines.add(
+                                            ChatLine(false, errorMessage)
+                                        )
+
+                                        status = "AI CONNECTION ERROR"
+
+                                    } finally {
+                                        attachment = null
+                                        busy = false
                                     }
-
-                                    attachment = null
-
-                                    lines.add(
-                                        ChatLine(false, answer)
-                                    )
-
-                                    status =
-                                        "RESPONSE RECEIVED • SYSTEM READY"
-
-                                    speak(answer)
-                                    busy = false
                                 }
                             }
                         }
                     ) {
-                        Text(
-                            "➤",
-                            color = cyan
-                        )
+                        Text("➤", color = cyan)
                     }
                 }
 
@@ -690,15 +698,15 @@ private object AiClient {
 
         val json = if (provider == "Gemini") {
 
-            org.json.JSONObject()
+            JSONObject()
                 .put(
                     "contents",
-                    org.json.JSONArray().put(
-                        org.json.JSONObject()
+                    JSONArray().put(
+                        JSONObject()
                             .put(
                                 "parts",
-                                org.json.JSONArray().put(
-                                    org.json.JSONObject()
+                                JSONArray().put(
+                                    JSONObject()
                                         .put("text", fullPrompt)
                                 )
                             )
@@ -708,12 +716,12 @@ private object AiClient {
 
         } else {
 
-            org.json.JSONObject()
+            JSONObject()
                 .put("model", "gpt-4o-mini")
                 .put(
                     "messages",
-                    org.json.JSONArray().put(
-                        org.json.JSONObject()
+                    JSONArray().put(
+                        JSONObject()
                             .put("role", "user")
                             .put("content", fullPrompt)
                     )
@@ -721,10 +729,11 @@ private object AiClient {
                 .toString()
         }
 
+        // UPDATED GEMINI MODEL
         val url = if (provider == "Gemini") {
 
             "https://generativelanguage.googleapis.com/v1beta/" +
-                "models/gemini-2.0-flash:generateContent?key=$key"
+                "models/gemini-3.8-flash:generateContent?key=$key"
 
         } else {
 
@@ -754,11 +763,11 @@ private object AiClient {
 
         if (!response.isSuccessful) {
             throw IllegalStateException(
-                "API error ${response.code}: ${body.take(500)}"
+                "API error ${response.code}: ${body.take(1000)}"
             )
         }
 
-        val result = org.json.JSONObject(body)
+        val result = JSONObject(body)
 
         if (provider == "Gemini") {
 
